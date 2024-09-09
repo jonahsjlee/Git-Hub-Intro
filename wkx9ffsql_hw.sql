@@ -30,3 +30,12 @@ WHERE a.Language = 'French';
 12. SELECT CustomerId, SUM(Total) AS TotalSum
 FROM Invoice
 GROUP BY CustomerId;
+
+
+Part 2 Queries:
+
+SELECT Name FROM Pokemon2 WHERE Type1 = 'Psychic';
+
+SELECT Name FROM Pokemon WHERE EvolutionStage = 1;
+
+SELECT Type FROM Vehicle WHERE Color = 'Red';
