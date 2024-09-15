@@ -1,0 +1,213 @@
+import sqlite3
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+#creates database
+conn = sqlite3.connect('student_grades.db')
+
+cursor = conn.cursor()
+
+cursor.execute("DROP TABLE IF EXISTS students;")
+cursor.execute("DROP TABLE IF EXISTS grades;")
+
+#creates student table
+create_table_query = '''
+CREATE TABLE IF NOT EXISTS students (
+    student_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL
+);
+'''
+#creates grade table
+create_table_query2 = '''
+CREATE TABLE IF NOT EXISTS grades (
+    grade_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER,
+    subject TEXT NOT NULL,
+    grade INTEGER,
+    FOREIGN KEY (student_id) REFERENCES students(student_id)
+);
+'''
+
+#inserts students
+add_student_query = '''
+INSERT INTO students (first_name, last_name)
+VALUES ('Alice', 'Johnson'),
+       ('Bob', 'Smith'),
+       ('Charlie', 'Brown'),
+       ('David', 'Fray'),
+       ('Eva', 'Davis');
+'''
+
+#inserts student grades
+add_grades_query = '''
+INSERT INTO grades (student_id, subject, grade)
+VALUES ('1', 'Math', '95'),
+       ('1', 'Science', '92'),
+       ('1', 'Literature', '88'),
+       ('2', 'Math', '100'),
+       ('2', 'Science', '100'),
+       ('2', 'Literature', '76'),
+       ('3', 'Math', '75'),
+       ('3', 'Science', '81'),
+       ('3', 'Literature', '99'),
+       ('4', 'Math', '92'),
+       ('4', 'Science', '91'),
+       ('4', 'Literature', '94'),
+       ('5', 'Math', '84'),
+       ('5', 'Science', '82'),
+       ('5', 'Literature', '87')
+'''
+
+#query for all students names' and their grades
+retrieve_names_grades_query = '''
+SELECT students.first_name, students.last_name, grades.subject, grades.grade
+FROM students
+INNER JOIN grades ON students.student_id = grades.student_id;
+'''
+
+#query for the average grade of each student
+average_grade_query = '''
+SELECT students.first_name, students.last_name, AVG(grades.grade) AS average_grade
+FROM students
+INNER JOIN grades ON students.student_id = grades.student_id
+GROUP BY students.student_id;
+'''
+
+#query for the student with the highest average grade
+highest_avg_grade_query = '''
+SELECT first_name, last_name
+FROM students
+WHERE student_id = (SELECT student_id FROM grades GROUP BY student_id ORDER BY AVG(grade) DESC LIMIT 1)
+'''
+
+#query for average math grade
+average_math_grade_query = '''
+SELECT AVG(grades.grade)
+FROM grades
+WHERE grades.subject = 'Math'
+'''
+
+#query names of all students who scored above 90 in any subject
+list_students_with_A = '''
+SELECT DISTINCT students.first_name, students.last_name
+FROM students
+INNER JOIN grades ON students.student_id = grades.student_id
+WHERE grades.grade >= 90
+'''
+
+# find student with highest grade (bonus)
+highest_grade_query = '''
+SELECT first_name, last_name, subject, grade
+FROM (
+    SELECT 
+        first_name, 
+        last_name, 
+        subject, 
+        grade,
+        ROW_NUMBER() OVER (PARTITION BY subject ORDER BY grade DESC) as rn
+    FROM students
+    INNER JOIN grades ON students.student_id = grades.student_id
+) t
+WHERE rn = 1
+'''
+
+#execute queries to create tables + add data
+cursor.execute(create_table_query)
+cursor.execute(create_table_query2)
+cursor.execute(add_student_query)
+cursor.execute(add_grades_query)
+
+
+# print the results of retrieve_names_grades_query
+cursor.execute(retrieve_names_grades_query)
+print("\nretrieve_names_grades_query results:")
+for row in cursor.fetchall():
+    print(row)
+
+# print the results of average_grade_query
+cursor.execute(average_grade_query)
+print("\naverage_grade_query results:")
+for row in cursor.fetchall():
+    print(row)
+
+# print the results of highest_avg_grade_query
+cursor.execute(highest_avg_grade_query)
+print("\nhighest_avg_grade_query results:")
+for row in cursor.fetchall():
+    print(row)
+
+# print the results of average_math_grade_query
+cursor.execute(average_math_grade_query)
+print("\naverage_math_grade_query results:")
+for row in cursor.fetchall():
+    print(row)
+
+# print the results of list_students_with_A query
+cursor.execute(list_students_with_A)
+print("\nlist_students_with_A query results:")
+for row in cursor.fetchall():
+    print(row)
+
+
+#load table data into data frames
+students_df = pd.read_sql_query("SELECT * FROM students", conn)
+grades_df = pd.read_sql_query("SELECT * FROM grades", conn)
+
+#combines both tables into one df that has student names, subject, and grade
+combined_df = pd.read_sql_query('''
+SELECT students.first_name, students.last_name, grades.subject, grades.grade
+FROM students
+INNER JOIN grades ON students.student_id = grades.student_id;
+''', conn)
+
+# (bonus)
+highest_grades_df = pd.read_sql_query(highest_grade_query, conn)
+
+
+# find average grades
+average_grades = combined_df.groupby(['first_name', 'last_name'])['grade'].mean()
+
+plt.figure(figsize=(10, 5))
+plt.bar(average_grades.index.map(' '.join), average_grades.values)
+plt.xlabel("Student Name")
+plt.ylabel("Average Grade")
+plt.title("Average Grades for Each Student")
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+plt.show()
+
+# create a grouped bar chart
+fig, ax = plt.subplots(figsize=(10, 5))
+
+subjects = highest_grades_df['subject'].unique()
+width = 0.2
+
+for i, subject in enumerate(subjects):
+    students = highest_grades_df[highest_grades_df['subject'] == subject]['first_name']
+    grades = highest_grades_df[highest_grades_df['subject'] == subject]['grade']
+    x = [j + i * width for j in range(len(students))]
+    ax.bar(x, grades, width, label=subject)
+
+ax.set_xticks([i + width for i in range(len(students))])
+ax.set_xticklabels(students)
+ax.set_ylabel("Grade")
+ax.set_title("Student with Highest Grade in Each Subject")
+ax.legend()
+plt.show()
+
+average_subject_grades = combined_df.groupby('subject')['grade'].mean()
+
+# bar chart
+plt.figure(figsize=(8, 5))
+plt.bar(average_subject_grades.index, average_subject_grades.values)
+plt.xlabel("Subject")
+plt.title("Average Grades for Each Subject")
+plt.ylabel("Average Grade")
+plt.show()
+
+
+# Commit the changes and close the connection
+conn.commit()
+conn.close()
